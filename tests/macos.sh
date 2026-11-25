@@ -29,9 +29,11 @@ setup() {
     sudo mkdir -p "$config_dir"
     # Prevent the installer from updating base or syncing the whole tree in its postflight.
     printf 'https://github.com/macports/macports-base/releases/tag/v2.12.7\n' > "$overlay/RELEASE_URL"
-    printf 'release_version_urls file://%s/RELEASE_URL\n' "$overlay" | sudo tee "$config_dir/macports.conf" >/dev/null
+    printf 'prefix /opt/local\nportdbpath /opt/local/var/macports\nsources_conf %s/sources.conf\narchive_sites_conf %s/archive_sites.conf\npubkeys_conf %s/pubkeys.conf\nvariants_conf %s/variants.conf\nrelease_version_urls file://%s/RELEASE_URL\n' \
+        "$config_dir" "$config_dir" "$config_dir" "$config_dir" "$overlay" | sudo tee "$config_dir/macports.conf" >/dev/null
     printf 'file://%s [default,nosync]\n' "$overlay" | sudo tee "$config_dir/sources.conf" >/dev/null
     sudo installer -verbose -pkg "$tmp/$macports_pkg" -target /
+    sudo cp "$config_dir/macports.conf.default" "$config_dir/macports.conf"
     printf 'file://%s [nosync]\nhttps://distfiles.macports.org/ports.tar.gz [default]\n' "$overlay" | sudo tee "$config_dir/sources.conf" >/dev/null
     sudo "$port" -Nv sync
     "$port" version
