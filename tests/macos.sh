@@ -8,28 +8,32 @@ fi
 port=/opt/local/bin/port
 ports=(docker docker-buildx-plugin docker-compose-plugin docker-sandboxes forgejo-runner forgejo-cli)
 overlay=/Users/Shared/macports-ci-overlay
-sources=/opt/local/etc/macports/sources.conf
+config_dir=/opt/local/etc/macports
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
 setup() {
     [[ $(uname -s) == Darwin && $(uname -m) == arm64 && $(sw_vers -productVersion) == 15.* ]] || fail 'expected macOS 15 arm64'
-    [[ ! -e $port && ! -e $overlay && ! -e $sources ]] || fail 'setup requires a clean test machine'
+    [[ ! -e $port && ! -e $overlay && ! -e $config_dir ]] || fail 'setup requires a clean test machine'
     local repo macports_pkg sha
     repo=$(cd "$(dirname "$0")/.." && pwd -P)
     tmp=$(mktemp -d)
     trap 'rm -rf -- "$tmp"' EXIT
     macports_pkg=MacPorts-2.12.7-15-Sequoia.pkg
     sha=87b2e87ed7adc4aca947b42eb7ff991614cc0edfccb486237f2bbc75f28aae63
-    curl -fsSL --retry 2 -o "$tmp/$macports_pkg" "https://github.com/macports/macports-base/releases/download/v2.12.7/$macports_pkg"
+    curl -fsSL --connect-timeout 15 --max-time 90 --retry 2 -o "$tmp/$macports_pkg" "https://github.com/macports/macports-base/releases/download/v2.12.7/$macports_pkg"
     (cd "$tmp"; printf '%s  %s\n' "$sha" "$macports_pkg" | shasum -a 256 -c -)
     mkdir -p "$overlay"
     cp -R "$repo/devel" "$overlay/"
     chmod -R a+rX "$overlay"
-    sudo mkdir -p "$(dirname "$sources")"
-    printf 'file://%s [nosync]\nhttps://ftp.fau.de/macports/release/tarballs/ports.tar.gz [default]\n' "$overlay" | sudo tee "$sources" >/dev/null
-    sudo installer -pkg "$tmp/$macports_pkg" -target /
-    sudo "$port" -N sync
+    sudo mkdir -p "$config_dir"
+    # Prevent the installer from updating base or syncing the whole tree in its postflight.
+    printf 'https://github.com/macports/macports-base/releases/tag/v2.12.7\n' > "$overlay/RELEASE_URL"
+    printf 'release_version_urls file://%s/RELEASE_URL\n' "$overlay" | sudo tee "$config_dir/macports.conf" >/dev/null
+    printf 'file://%s [default,nosync]\n' "$overlay" | sudo tee "$config_dir/sources.conf" >/dev/null
+    sudo installer -verbose -pkg "$tmp/$macports_pkg" -target /
+    printf 'file://%s [nosync]\nhttps://distfiles.macports.org/ports.tar.gz [default]\n' "$overlay" | sudo tee "$config_dir/sources.conf" >/dev/null
+    sudo "$port" -Nv sync
     "$port" version
     rm -rf -- "$tmp"
     trap - EXIT

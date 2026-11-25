@@ -16,6 +16,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install MacPorts and register overlay
+        timeout-minutes: 8
         run: bash tests/macos.sh setup
       - name: Index and lint the overlay
         run: bash tests/macos.sh lint
