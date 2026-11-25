@@ -1,0 +1,73 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+
+name                docker-buildx-plugin
+version             0.39.1
+revision            0
+homepage            https://github.com/docker/buildx
+supported_archs     arm64
+installs_libs       no
+use_xcode           no
+categories          devel
+license             Apache-2
+maintainers         {gmail.com:judy2006969 @s4078486sa} \
+                    openmaintainer
+description         Docker CLI plugin for extended build capabilities with BuildKit
+
+long_description    Buildx is a Docker CLI plugin that extends the docker build \
+                    command with full BuildKit capabilities, multi-node \
+                    concurrent builds, multi-platform image cross-compilation, \
+                    cache import/export, and Compose file build support.
+
+master_sites        https://github.com/docker/buildx/releases/download/v${version}/
+distname            buildx-v${version}.darwin-arm64
+dist_subdir         ${name}/${version}
+extract.suffix      {}
+checksums           rmd160  3bfba1e769a3dc95153945c0dd23463df561e459 \
+                    sha256  7a7f10602f0826d36b046e8db012b4cbfaa4ba56f9d2a5d374fe5bb7ae864fc4 \
+                    size    65238528
+
+# Install the signed vendor binary unchanged; no Go toolchain or version patch.
+extract {
+    xinstall -d ${worksrcpath}
+    copy ${distpath}/${distfiles} ${worksrcpath}/${name}
+}
+use_configure       no
+build               {}
+
+depends_run         port:docker
+
+destroot {
+    # Install as Docker CLI plugin and provide a standalone executable symlink.
+    xinstall -d ${destroot}${prefix}/libexec/docker/cli-plugins
+    xinstall -m 755 ${worksrcpath}/${name} ${destroot}${prefix}/libexec/docker/cli-plugins/docker-buildx
+    xinstall -d ${destroot}${prefix}/bin
+    ln -s ../libexec/docker/cli-plugins/docker-buildx ${destroot}${prefix}/bin/docker-buildx
+
+    # Generated from the same upstream release's Linux binary, without editing.
+    xinstall -d ${destroot}${prefix}/share/bash-completion/completions \
+                ${destroot}${prefix}/share/fish/vendor_completions.d \
+                ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -m 644 ${filespath}/docker-buildx.bash ${destroot}${prefix}/share/bash-completion/completions/docker-buildx
+    xinstall -m 644 ${filespath}/docker-buildx.fish ${destroot}${prefix}/share/fish/vendor_completions.d/docker-buildx.fish
+    xinstall -m 644 ${filespath}/docker-buildx.zsh ${destroot}${prefix}/share/zsh/site-functions/_docker-buildx
+}
+
+notes "
+Buildx can be used either through the Docker CLI:
+  docker buildx <command>
+
+Or directly as a standalone binary:
+  docker-buildx <command>
+
+To set up buildx as the default builder with multi-platform cross-compilation:
+  docker buildx create --name mybuilder --use
+  docker buildx inspect --bootstrap
+
+Shell completions are installed for Bash, Fish, and Zsh.
+"
+
+livecheck.type      regex
+livecheck.url       https://api.github.com/repos/docker/buildx/releases/latest
+livecheck.regex     {"tag_name":\s*"v([0-9.]+)"}

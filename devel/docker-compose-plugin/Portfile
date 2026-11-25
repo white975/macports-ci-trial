@@ -1,0 +1,83 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+
+name                docker-compose-plugin
+version             5.8.0
+revision            0
+homepage            https://github.com/docker/compose
+supported_archs     arm64
+installs_libs       no
+use_xcode           no
+categories          devel
+license             Apache-2
+maintainers         {gmail.com:judy2006969 @s4078486sa} \
+                    openmaintainer
+description         Define and run multi-container applications with Docker Compose
+long_description    Docker Compose is a tool for running multi-container applications on \
+                    Docker defined using the Compose file format. A Compose file is used \
+                    to define how one or more containers that make up your application are \
+                    configured. This port provides both the official Docker CLI plugin \
+                    (docker compose) and the standalone executable (docker-compose).
+
+master_sites        https://github.com/docker/compose/releases/download/v${version}/
+distname            docker-compose-darwin-aarch64
+dist_subdir         ${name}/${version}
+extract.suffix      {}
+checksums           rmd160  0e5d0b430858ee8da8fabdfd2694bb3a9e8687ee \
+                    sha256  008b8fcf6c6d60340f5796626a0f0d51c042085793a9b1653343011727140b71 \
+                    size    32440418
+
+# Install the vendor binary unchanged; no Go toolchain or version patch needed.
+extract {
+    xinstall -d ${worksrcpath}
+    copy ${distpath}/${distfiles} ${worksrcpath}/${name}
+}
+use_configure       no
+build               {}
+
+depends_run         port:docker
+
+destroot {
+    # 1. Install as Docker CLI plugin
+    xinstall -d ${destroot}${prefix}/libexec/docker/cli-plugins
+    xinstall -m 755 ${worksrcpath}/${name} ${destroot}${prefix}/libexec/docker/cli-plugins/docker-compose
+
+    # 2. Provide standalone executable symlink
+    xinstall -d ${destroot}${prefix}/bin
+    ln -s ../libexec/docker/cli-plugins/docker-compose ${destroot}${prefix}/bin/docker-compose
+
+    # 3. Install shell completions for standalone docker-compose
+    set bash_completions_dir ${destroot}${prefix}/share/bash-completion/completions
+    set fish_completions_dir ${destroot}${prefix}/share/fish/vendor_completions.d
+    set zsh_completions_dir  ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -d ${bash_completions_dir} ${fish_completions_dir} ${zsh_completions_dir}
+
+    if {[file exists ${filespath}/docker-compose.bash]} {
+        xinstall -m 644 ${filespath}/docker-compose.bash ${bash_completions_dir}/docker-compose
+    }
+    if {[file exists ${filespath}/docker-compose.fish]} {
+        xinstall -m 644 ${filespath}/docker-compose.fish ${fish_completions_dir}/docker-compose.fish
+    }
+    if {[file exists ${filespath}/docker-compose.zsh]} {
+        xinstall -m 644 ${filespath}/docker-compose.zsh ${zsh_completions_dir}/_docker-compose
+    }
+}
+
+notes "
+Docker Compose can be used either through the Docker CLI:
+  docker compose <command>
+
+Or directly as a standalone binary:
+  docker-compose <command>
+
+Shell completions are installed for Bash, Fish, and Zsh for both:
+  - 'docker compose ...' (via docker shell completion)
+  - 'docker-compose ...' (via standalone shell wrappers)
+
+Requires a running Docker daemon (e.g. Colima, OrbStack, or Docker Desktop).
+"
+
+livecheck.type      regex
+livecheck.url       https://api.github.com/repos/docker/compose/releases/latest
+livecheck.regex     {"tag_name":\s*"v([0-9.]+)"}

@@ -1,0 +1,118 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+PortGroup           golang 1.0
+
+# Source-build exception: preserve MacPorts plugin discovery without user config.
+go.setup            github.com/docker/cli 29.10.1 v
+go.toolchain_min    1.27.4
+revision            0
+name                docker
+categories          devel
+license             Apache-2
+maintainers         {gmail.com:judy2006969 @s4078486sa} \
+                    openmaintainer
+description         Client CLI for the Docker container engine
+long_description    Docker is an open platform for developing, shipping, and \
+                    running applications inside lightweight containers. This port \
+                    provides the official Docker CLI client (docker), manual pages, \
+                    and shell completions. Note that running containers on macOS \
+                    requires a container daemon (e.g. Colima, OrbStack, or Docker Desktop).
+
+checksums           rmd160  bd8b057ef42333140c95084cf2d7cbb6841f59fd \
+                    sha256  64701a1a4a2d3906f43809cd7b8636246e73432715d1fb279c35b18bca0e4b76 \
+                    size    6986253
+
+build.target        github.com/docker/cli/cmd/docker
+
+depends_build-append \
+                    bin:go-md2man:go-md2man
+
+post-patch {
+    # Allow Docker CLI to discover plugins in standard MacPorts locations
+    # without requiring custom ~/.docker/config.json cliPluginsExtraDirs.
+    reinplace "s|/usr/local/lib|${prefix}/lib|g" \
+        ${worksrcpath}/cli-plugins/manager/manager_unix.go
+    reinplace "s|/usr/local/libexec|${prefix}/libexec|g" \
+        ${worksrcpath}/cli-plugins/manager/manager_unix.go
+}
+
+pre-build {
+    build.cmd ${go.bin} build -ldflags \
+        "\"-X github.com/docker/cli/cli/version.Version=${version}\""
+}
+
+destroot {
+    xinstall -m 755 ${worksrcpath}/${name} ${destroot}${prefix}/bin/
+
+    # Ensure standard plugin directories exist
+    xinstall -d ${destroot}${prefix}/libexec/docker/cli-plugins \
+                ${destroot}${prefix}/lib/docker/cli-plugins
+
+    foreach src [glob -nocomplain ${worksrcpath}/man/*.?.md] {
+        set page [file rootname [file tail ${src}]]
+        set section [string range [file extension ${page}] 1 end]
+        set dst ${destroot}${prefix}/share/man/man${section}/${page}
+
+        # skip dockerd; daemon is not provided natively on macOS
+        if {${page} ne "dockerd.8"} {
+            xinstall -d [file dirname ${dst}]
+            system -W ${worksrcpath}/man "go-md2man -out ${dst} -in ${src}"
+        }
+    }
+
+    # Shell completions for bash, fish, and zsh
+    set bash_completions_dir ${destroot}${prefix}/share/bash-completion/completions
+    set fish_completions_dir ${destroot}${prefix}/share/fish/vendor_completions.d
+    set zsh_completions_dir  ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -d ${bash_completions_dir} ${fish_completions_dir} ${zsh_completions_dir}
+
+    if {[file exists ${worksrcpath}/contrib/completion/bash/docker]} {
+        xinstall -m 644 ${worksrcpath}/contrib/completion/bash/docker ${bash_completions_dir}/
+    }
+    if {[file exists ${worksrcpath}/contrib/completion/fish/docker.fish]} {
+        xinstall -m 644 ${worksrcpath}/contrib/completion/fish/docker.fish ${fish_completions_dir}/
+    }
+    if {[file exists ${worksrcpath}/contrib/completion/zsh/_docker]} {
+        xinstall -m 644 ${worksrcpath}/contrib/completion/zsh/_docker ${zsh_completions_dir}/
+    }
+}
+
+notes "
+Docker CLI client installed to ${prefix}/bin/docker.
+
+To run containers on macOS, a container daemon is required:
+  - Colima:         port install colima && colima start
+  - OrbStack:       https://orbstack.dev
+  - Docker Desktop: https://www.docker.com/products/docker-desktop/
+  - Remote engine:  export DOCKER_HOST=\"ssh://user@remote-linux-host\"
+
+CLI plugins (buildx, compose):
+  sudo port install docker-buildx-plugin docker-compose-plugin
+
+This Docker CLI is built from source to preserve the MacPorts plugin-path patch.
+No config.json changes are needed when you run ${prefix}/bin/docker from this
+overlay and install the plugins above with the same MacPorts prefix.
+Plugins in the active Docker config directory's cli-plugins folder are also
+discovered automatically (normally ~/.docker/cli-plugins).
+
+Configure cliPluginsExtraDirs only if the Docker CLI you actually run does not
+search the plugin install directory, or plugins are in a custom directory.
+Check which Docker is active with: command -v docker
+For unpatched Docker with MacPorts plugins, add the following directory to the
+active Docker config.json (normally ~/.docker/config.json):
+
+  {
+    \"cliPluginsExtraDirs\": \[
+      \"${prefix}/libexec/docker/cli-plugins\"
+    \]
+  }
+
+Merge this key into existing JSON; preserve auths, credsStore and other settings.
+Use the actual plugin directory if it differs from the example above.
+DOCKER_CONFIG or docker --config changes the active config directory.
+Direct docker-buildx/docker-compose commands do not need Docker plugin discovery.
+Check without a daemon: docker buildx version && docker compose version
+"
+
+github.livecheck.regex  {([^"r]+)}

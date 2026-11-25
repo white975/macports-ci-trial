@@ -1,0 +1,83 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+
+name                docker-sandboxes
+version             0.54.1
+revision            0
+categories          devel
+maintainers         {gmail.com:judy2006969 @s4078486sa}
+license             Restrictive
+
+homepage            https://docs.docker.com/ai/sandboxes/
+description         Docker Sandboxes CLI and bundled microVM runtime
+long_description    Docker Sandboxes runs coding agents in isolated microVMs. \
+                    This port installs Docker's official prebuilt sbx bundle, \
+                    including its private runtime and shell completions. \
+                    Docker Desktop and a host Docker Engine are not required.
+
+# Follow Docker's supported host policy, not the build host's SDK version.
+platforms           {darwin >= 23}
+supported_archs     arm64
+installs_libs       no
+use_xcode           no
+
+master_sites        https://github.com/docker/sbx-releases/releases/download/v${version}/
+distname            DockerSandboxes-darwin
+dist_subdir         ${name}/${version}
+checksums           rmd160  a69f00d3671374c033cb4569a8440d0bb72699e4 \
+                    sha256  0427308faacebf36c32bc7deb3d658e535ce82af818f8f39a7544284f604db52 \
+                    size    225673842
+
+extract.mkdir       yes
+use_configure       no
+build               {}
+
+pre-fetch {
+    if {${os.platform} ne "darwin" || ${os.major} < 23} {
+        return -code error "Docker Sandboxes requires macOS 14 or later."
+    }
+    if {${configure.build_arch} ne "arm64"} {
+        return -code error "Docker Sandboxes requires Apple silicon (arm64)."
+    }
+}
+
+destroot {
+    # Keep the upstream layout (bin/* are relative symlinks into Sbx.app) and
+    # the signed Mach-O bytes. Copying just sbx would lose the VM kernel,
+    # rootfs and helper binaries.
+    set bundle ${destroot}${prefix}/libexec/${name}
+    xinstall -d ${bundle}
+    foreach entry {bin Sbx.app LICENSE THIRD-PARTY-NOTICES} {
+        copy ${worksrcpath}/${entry} ${bundle}/
+    }
+
+    xinstall -d ${destroot}${prefix}/bin
+    ln -s ../libexec/${name}/Sbx.app/Contents/MacOS/sbx ${destroot}${prefix}/bin/sbx
+
+    xinstall -d ${destroot}${prefix}/share/bash-completion/completions \
+                ${destroot}${prefix}/share/zsh/site-functions \
+                ${destroot}${prefix}/share/fish/vendor_completions.d
+    xinstall -m 0644 ${worksrcpath}/Sbx.app/Contents/Resources/completions/bash/sbx \
+        ${destroot}${prefix}/share/bash-completion/completions/sbx
+    xinstall -m 0644 ${worksrcpath}/Sbx.app/Contents/Resources/completions/zsh/_sbx \
+        ${destroot}${prefix}/share/zsh/site-functions/_sbx
+    xinstall -m 0644 ${worksrcpath}/Sbx.app/Contents/Resources/completions/fish/sbx.fish \
+        ${destroot}${prefix}/share/fish/vendor_completions.d/sbx.fish
+}
+
+notes "
+Run sbx as your normal user, not with sudo:
+    sbx version
+    sbx login
+
+Before upgrading or uninstalling, stop the per-user daemon yourself:
+    sbx daemon stop
+
+This port does not start services, log in, or remove sandbox/user data.
+Docker's bundle is proprietary and subject to its own license.
+"
+
+livecheck.type      regex
+livecheck.url       https://api.github.com/repos/docker/sbx-releases/releases/latest
+livecheck.regex     {"tag_name":\s*"v([0-9.]+)"}

@@ -1,0 +1,25 @@
+name: Ports
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    name: macOS 15 arm64
+    runs-on: macos-15
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install MacPorts and register overlay
+        run: bash tests/macos.sh setup
+      - name: Index and lint the overlay
+        run: bash tests/macos.sh lint
+      - name: Install ports from their recipes
+        run: bash tests/macos.sh install
+      - name: Run the installed commands
+        run: bash tests/macos.sh smoke

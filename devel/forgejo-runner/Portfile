@@ -1,0 +1,68 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+PortGroup           golang 1.0
+
+# Upstream publishes Linux binaries only, so build from source.
+go.setup            code.forgejo.org/forgejo/runner 13.2.2 v
+go.toolchain_min    1.26.0
+# Upstream does not vendor modules; go fetches them and verifies go.sum.
+go.offline_build    no
+revision            0
+name                forgejo-runner
+categories          devel
+license             GPL-3+
+maintainers         {gmail.com:judy2006969 @s4078486sa}
+description         Forgejo Actions runner
+long_description    Forgejo Runner is a daemon that connects to a Forgejo \
+                    instance and runs jobs for continuous integration. It can \
+                    also run workflows locally and act as a cache server.
+
+homepage            https://code.forgejo.org/forgejo/runner
+
+master_sites        ${homepage}/archive/
+distname            v${version}
+dist_subdir         ${name}
+checksums           rmd160  1c6250e36f18f7878827b444bd526459029902d8 \
+                    sha256  81af58eeba53154c7d69f1ecf4501d7d04cf61b3d4fe31373f5e74fd7ea2a927 \
+                    size    3596733
+
+build.args          -o ${name} \
+                    -ldflags \
+                    "\"-X code.forgejo.org/forgejo/runner/v13/internal/pkg/ver.version=v${version}\""
+
+destroot {
+    xinstall -m 0755 ${worksrcpath}/${name} ${destroot}${prefix}/bin/
+
+    set docdir ${destroot}${prefix}/share/doc/${name}
+    xinstall -d ${docdir}
+    xinstall -m 0644 -W ${worksrcpath} LICENSE README.md ${docdir}
+
+    # Shell completions for bash, fish, and zsh (cobra's hidden completion command)
+    set bash_completions_dir ${destroot}${prefix}/share/bash-completion/completions
+    set fish_completions_dir ${destroot}${prefix}/share/fish/vendor_completions.d
+    set zsh_completions_dir  ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -d ${bash_completions_dir} ${fish_completions_dir} ${zsh_completions_dir}
+
+    system -W ${worksrcpath} "./${name} completion bash > ${bash_completions_dir}/${name}"
+    system -W ${worksrcpath} "./${name} completion fish > ${fish_completions_dir}/${name}.fish"
+    system -W ${worksrcpath} "./${name} completion zsh > ${zsh_completions_dir}/_${name}"
+}
+
+notes "
+Forgejo Runner installed to ${prefix}/bin/${name}.
+Upstream supports and tests Linux only; macOS is not an upstream target.
+
+Run it as your normal user, not with sudo. Start from the example config:
+  ${name} generate-config > config.yml
+Registration and daemon setup: https://forgejo.org/docs/latest/admin/actions/
+
+Jobs with a host label (e.g. macos-arm64:host) run directly on this Mac as
+that user. Docker labels need a reachable Docker daemon (e.g. Colima).
+
+This port does not install a launchd service or create any configuration.
+"
+
+livecheck.type      regex
+livecheck.url       https://code.forgejo.org/api/v1/repos/forgejo/runner/releases/latest
+livecheck.regex     {"tag_name":\s*"v([0-9.]+)"}

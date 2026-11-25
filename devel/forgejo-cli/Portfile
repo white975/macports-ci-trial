@@ -1,0 +1,69 @@
+# -*- coding: utf-8; mode: tcl; tab-width: 4; indent-tabs-mode: nil; c-basic-offset: 4 -*- vim:fenc=utf-8:ft=tcl:et:sw=4:ts=4:sts=4
+
+PortSystem          1.0
+PortGroup           cargo 1.0
+
+# Upstream publishes Linux and Windows binaries only, so build from source.
+name                forgejo-cli
+version             0.7.0
+revision            0
+categories          devel
+license             {Apache-2 MIT}
+maintainers         {gmail.com:judy2006969 @s4078486sa}
+description         CLI client for Forgejo (fj)
+long_description    fj is a command line client for Forgejo, akin to gh, glab \
+                    or tea. It manages issues, pull requests, repositories, \
+                    releases, organizations and Forgejo Actions.
+
+homepage            https://codeberg.org/forgejo-contrib/forgejo-cli
+
+master_sites        ${homepage}/archive/
+distname            v${version}
+dist_subdir         ${name}
+worksrcdir          ${name}
+checksums           rmd160  1b9909902e246370f196db21e4f369e70e929b27 \
+                    sha256  748ce60eb18e72af83ef3956910933b1e091abf673f12ff9777aea214f6eae40 \
+                    size    176023
+
+# Crates are fetched from crates.io at build time and verified against
+# Cargo.lock, instead of listing all of them in cargo.crates.
+cargo.offline_cmd   --locked
+
+# libssh2 (bundled by libssh2-sys) links OpenSSL; libgit2 is bundled too, so
+# the build does not depend on whether a matching system libgit2 is found.
+openssl.branch      3
+depends_lib-append  port:zlib
+build.args          --features git2/vendored-libgit2
+
+destroot {
+    set fj ${worksrcpath}/target/[cargo.rust_platform]/release/fj
+    xinstall -m 0755 ${fj} ${destroot}${prefix}/bin/
+
+    set docdir ${destroot}${prefix}/share/doc/${name}
+    xinstall -d ${docdir}
+    xinstall -m 0644 -W ${worksrcpath} LICENSE-APACHE LICENSE-MIT README.md ${docdir}
+
+    # Shell completions for bash, fish, and zsh
+    set bash_completions_dir ${destroot}${prefix}/share/bash-completion/completions
+    set fish_completions_dir ${destroot}${prefix}/share/fish/vendor_completions.d
+    set zsh_completions_dir  ${destroot}${prefix}/share/zsh/site-functions
+    xinstall -d ${bash_completions_dir} ${fish_completions_dir} ${zsh_completions_dir}
+
+    system "${fj} completion bash > ${bash_completions_dir}/fj"
+    system "${fj} completion fish > ${fish_completions_dir}/fj.fish"
+    system "${fj} completion zsh > ${zsh_completions_dir}/_fj"
+}
+
+notes "
+forgejo-cli installed the fj command.
+
+For a self-hosted Forgejo instance, create an access token at
+https://<host>/user/settings/applications and add it with:
+  fj -H <host> auth add-key
+fj auth login (browser OAuth) only works for instances built into fj,
+such as codeberg.org.
+"
+
+livecheck.type      regex
+livecheck.url       https://codeberg.org/api/v1/repos/forgejo-contrib/forgejo-cli/releases/latest
+livecheck.regex     {"tag_name":\s*"v([0-9.]+)"}
